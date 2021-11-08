@@ -1,35 +1,30 @@
 #!/bin/bash
+printpage()
+{   
+    {
+      read _; read _ # discard header and leading blank line
+      while read -r siguid spaceurl siname; do
+      read -r sispacename orgurl < <(cf curl $spaceurl | jq -r '"\(.entity.name)  \(.entity.organization_url)"' && printf '\0')
+      siorgname=$(cf curl $orgurl | jq -r .entity.name)
+      echo "$siguid $siname $siorgname $sispacename" | awk '{ printf "%-40s|%-40s|%-40s|%-40s\n", $1, $2 , $3, $4}'
+      done
+    } < <(echo $resources | jq -r '"\(.metadata.guid)  \(.entity.space_url)  \(.entity.name)"' && printf '\0')
+}
 
-#IFS=$'\n' read -r -d '' -a my_array < <( cf curl /v2/service_instances | jq -r '.resources[] | "\(.metadata.guid)  \(.entity.space_url)  \(.entity.name)"' && printf '\0' )
-#declare -p my_array
+## main 
+## get first page
+onepage=$(cf curl /v2/service_instances)
+next_url=$(echo $onepage | jq -r '.next_url')
+resources=$(echo $onepage | jq -r '.resources[]')
 
-declare -A siguids=() spaceurls=() sinames=()
-{
-  read _; read _ # discard header and leading blank line
-  while read -r siguid spaceurl siname; do
-    siguids[$siguid]=$siguid
-    spaceurls[$siguid]=$spaceurl
-    sinames[$siguid]=$siname
-  done
-} < <(cf curl /v2/service_instances | jq -r '.resources[] | "\(.metadata.guid)  \(.entity.space_url)  \(.entity.name)"' && printf '\0')
+echo "SI_GUID SI_NAME ORG SPACE" | awk '{ printf "%-40s|%-40s|%-40s|%-40s\n", $1, $2 , $3, $4}'
+echo $(yes - | head -n80)
+printpage
 
-# for debugging, print the result of the operation
-#declare -p siguids spaceurls sinames
-
-## now loop through the above array
-declare -A sigspacenames=()  siorgurls=()
-for i in "${siguids[@]}"
-do
-   # echo "$i"
-   #echo "${siguids[$i]}  ${spaceurls[$i]}  ${sinames[$i]}"
-   # or do whatever with individual element of the array
-
-   read -r spacename orgurl < <(cf curl ${spaceurls[$i]} | jq -r '"\(.entity.name)  \(.entity.organization_url)"' && printf '\0')
-   sigspacenames[$i]=$spacename
-   siorgurls[$i]=$orgurl
-   
-    #echo $spacename  $orgurl
-   echo "$i  ${sigspacenames[$i]} ${siorgurls[$i]}"
+## get remaining pages
+while [ $next_url != "null" ]; do
+    onepage=$(cf curl $next_url)
+    next_url=$(echo $onepage | jq -r '.next_url')
+    resources=$(echo $onepage | jq -r '.resources[]')
+    printpage
 done
-
-
